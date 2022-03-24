@@ -20,8 +20,9 @@ Steps:
 */
 
 const (
-	width  = 10
-	height = 10
+	width         = 10
+	height        = 10
+	alive_percent = 25
 )
 
 type Universe [][]bool
@@ -45,9 +46,11 @@ func (u Universe) Seed() {
 	// 激活细胞，可以随机激活世界中约25%的细胞
 	for i := 0; i < height; i++ {
 		for j := 0; j < width; j++ {
-			randnum := rand.Intn(100) % 4
-			if randnum == 0 {
+			randnum := rand.Intn(100)
+			if randnum < alive_percent {
 				u[i][j] = true
+			} else {
+				u[i][j] = false
 			}
 		}
 	}
