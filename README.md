@@ -710,3 +710,8 @@ fanIn := func(done <-chan interface{}, channels ...<-chan interface{}) <-chan in
 从一系列的channel中消费产生的值
 
 ### 4.10 context 
+
+作用: 
+1. 提供一个可以取消调用图中分支的API
+2. 提供用于通过呼叫传输请求范围数据的数据包
+#### 4.10.1 Cancel
