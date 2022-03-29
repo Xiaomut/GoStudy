@@ -227,7 +227,7 @@ onceA.Do(initA)
 package main
 
 import (
-	"fmt"
+    "fmt"
 )
 
 func main() {
@@ -368,8 +368,8 @@ Done.
 package main
 
 import (
-	"fmt"
-	"math/rand"
+    "fmt"
+    "math/rand"
 )
 
 func main() {
@@ -556,49 +556,49 @@ func main() {
 package main
 
 import (
-	"fmt"
-	"math/rand"
+    "fmt"
+    "math/rand"
 )
 
 func main() {
-	repeat := func(done <-chan interface{}, values ...interface{}) <-chan interface{} {
-		valueStream := make(chan interface{})
-		go func() {
-			defer close(valueStream)
-			for {
-				for _, v := range values {
-					select {
-					case <-done:
-						return
-					case valueStream <- v:
-					}
-				}
-			}
-		}()
-		return valueStream
-	}
+    repeat := func(done <-chan interface{}, values ...interface{}) <-chan interface{} {
+        valueStream := make(chan interface{})
+        go func() {
+            defer close(valueStream)
+            for {
+                for _, v := range values {
+                    select {
+                    case <-done:
+                        return
+                    case valueStream <- v:
+                    }
+                }
+            }
+        }()
+        return valueStream
+    }
 
-	take := func(done <-chan interface{}, valueStream <-chan interface{}, num int) <-chan interface{} {
-		takeStream := make(chan interface{})
-		go func() {
-			defer close(takeStream)
-			for i := 0; i < num; i++ {
-				select {
-				case <-done:
-					return
-				case takeStream <- valueStream:
-				}
-			}
-		}()
-		return takeStream
-	}
-	
-	done := make(chan interface{})
-	defer close(done)
+    take := func(done <-chan interface{}, valueStream <-chan interface{}, num int) <-chan interface{} {
+        takeStream := make(chan interface{})
+        go func() {
+            defer close(takeStream)
+            for i := 0; i < num; i++ {
+                select {
+                case <-done:
+                    return
+                case takeStream <- valueStream:
+                }
+            }
+        }()
+        return takeStream
+    }
+    
+    done := make(chan interface{})
+    defer close(done)
 
-	for num := range take(done, repeat(done, 1), 10) {
-		fmt.Printf("%v", num)
-	}
+    for num := range take(done, repeat(done, 1), 10) {
+        fmt.Printf("%v", num)
+    }
 }
 ```
 
@@ -606,26 +606,26 @@ func main() {
 package main
 
 import (
-	"fmt"
-	"math/rand"
+    "fmt"
+    "math/rand"
 )
 
 func main() {
-	take := func(done <-chan interface{}, valueStream <-chan interface{}, num int) <-chan interface{} {
-		takeStream := make(chan interface{})
-		go func() {
-			defer close(takeStream)
-			for i := 0; i < num; i++ {
-				select {
-				case <-done:
-					return
-				case takeStream <- valueStream:
-				}
-			}
-		}()
-		return takeStream
-	}
-	
+    take := func(done <-chan interface{}, valueStream <-chan interface{}, num int) <-chan interface{} {
+        takeStream := make(chan interface{})
+        go func() {
+            defer close(takeStream)
+            for i := 0; i < num; i++ {
+                select {
+                case <-done:
+                    return
+                case takeStream <- valueStream:
+                }
+            }
+        }()
+        return takeStream
+    }
+    
     repeatFn := func(done <-chan interface{}, fn func() interface{}) <-chan interface{} {
         valueStream := make(chan interface{})
         go func() {
@@ -640,15 +640,15 @@ func main() {
         }()
         return valueStream
     }
-	done := make(chan interface{})
-	defer close(done)
+    done := make(chan interface{})
+    defer close(done)
 
-	randnum := func() interface{} {
-		return rand.Int()
-	}
-	for num := range take(done, repeatFn(done, randnum), 10) {
-		fmt.Println(num)
-	}
+    randnum := func() interface{} {
+        return rand.Int()
+    }
+    for num := range take(done, repeatFn(done, randnum), 10) {
+        fmt.Println(num)
+    }
 }
 ```
 
@@ -715,3 +715,160 @@ fanIn := func(done <-chan interface{}, channels ...<-chan interface{}) <-chan in
 1. 提供一个可以取消调用图中分支的API
 2. 提供用于通过呼叫传输请求范围数据的数据包
 #### 4.10.1 Cancel
+
+可能有三种情况
+1. goroutine 的父 goroutine 想取消它
+2. 一个 goroutine 可能想取消子 goroutine
+3. goroutine 中的任何阻塞操作都必须是可抢占的，以便可以被取消
+
+**先看一段代码**
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "sync"
+    "time"
+)
+
+func printGreeting(ctx context.Context) error {
+    greeting, err := genGreeting(ctx)
+    if err != nil {
+        return err
+    }
+    fmt.Printf("%s world!\n", greeting)
+    return nil
+}
+
+func genGreeting(ctx context.Context) (string, error) {
+    // 使用WithTimeout包装，将在1s后自动取消返回的context，从而取消它传递该context的任何子函数
+    ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+    // ctx, cancel := context.WithTimeout(ctx, 1*time.Minute)
+    defer cancel()
+    switch locale, err := locale(ctx); {
+    case err != nil:
+        return "", err
+    case locale == "EN/US":
+        return "hello", nil
+    }
+    return "", fmt.Errorf("unsupported locale")
+}
+
+func printFarewell(ctx context.Context) error {
+    farewell, err := genFarewell(ctx)
+    if err != nil {
+        return err
+    }
+    fmt.Printf("%s world!\n", farewell)
+    return nil
+}
+
+func genFarewell(ctx context.Context) (string, error) {
+    switch locale, err := locale(ctx); {
+    case err != nil:
+        return "", err
+    case locale == "EN/US":
+        return "goodbye", nil
+    }
+    return "", fmt.Errorf("unsupported locale")
+}
+
+func locale(ctx context.Context) (string, error) {
+    select {
+    case <-ctx.Done():
+        // 这一行返回为什么Context被取消的原因。该错误会已知弹出到main，这会导致取消
+        return "", ctx.Err()
+    case <-time.After(1 * time.Minute):
+    // case <-time.After(1 * time.Second):
+    }
+    return "EN/US", nil
+}
+
+func main() {
+    var wg sync.WaitGroup
+    // 创建context对象
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    wg.Add(1)
+    go func() {
+        defer wg.Done()
+        if err := printGreeting(ctx); err != nil {
+            fmt.Printf("cannot print greeting: %v\n", err)
+            // 如果从打印问候语返回错误，main将取消这个context
+            cancel()
+        }
+    }()
+
+    wg.Add(1)
+    go func() {
+        defer wg.Done()
+        if err := printFarewell(ctx); err != nil {
+            fmt.Printf("cannot print farewell: %v\n", err)
+        }
+    }()
+    wg.Wait()
+}
+```
+
+- 输出结果
+    > cannot print greeting: context deadline exceeded
+        cannot print farewell: context canceled
+
+将我注释掉的代码更换一下
+
+```go
+func genGreeting(ctx context.Context) (string, error) {
+    // 使用WithTimeout包装，将在1s后自动取消返回的context，从而取消它传递该context的任何子函数
+    // ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+    ctx, cancel := context.WithTimeout(ctx, 1*time.Minute)
+    defer cancel()
+    switch locale, err := locale(ctx); {
+    case err != nil:
+        return "", err
+    case locale == "EN/US":
+        return "hello", nil
+    }
+    return "", fmt.Errorf("unsupported locale")
+}
+
+func locale(ctx context.Context) (string, error) {
+    select {
+    case <-ctx.Done():
+        // 这一行返回为什么Context被取消的原因。该错误会已知弹出到main，这会导致取消
+        return "", ctx.Err()
+    // case <-time.After(1 * time.Minute):
+    case <-time.After(1 * time.Second):
+    }
+    return "EN/US", nil
+}
+```
+
+- 输出结果
+    > goodbye world!
+    hello world!
+
+发现就可以正常输出了。原因就在于local的运行时间已超时而导致cancel，所以 `genGreeting` 检测到了ctx的超时也因此无法正常运行
+
+接下来再对函数进行更改，基于第一部分的代码将locale函数更改为
+
+```go
+func locale(ctx context.Context) (string, error) {
+	if deadline, ok := ctx.Deadline(); ok {
+		if deadline.Sub(time.Now().Add(1*time.Minute)) <= 0 {
+			return "", context.DeadlineExceeded
+		}
+	}
+	select {
+	case <-ctx.Done():
+		// 这一行返回为什么Context被取消的原因。该错误会已知弹出到main，这会导致取消
+		return "", ctx.Err()
+	case <-time.After(1 * time.Minute):
+		// case <-time.After(1 * time.Second):
+	}
+	return "EN/US", nil
+}
+```
+
+`ctx.Deadline()` 是为了检查context是否提供了超时时间。如果超过截止时间，那么返回context包中的特定错误。
