@@ -12,8 +12,8 @@ margin: auto;
 ## 1. 基本概念
 
 - 并发和并行的区别
-    - 并发属于代码，并行属于一个运行中的程序。
-    - 我的理解是并行是指同时刻运行同一段代码（这段代码实现的功能是同时生效的），并发时同时刻可以运行不同的代码（可以是不同功能的代码）
+    - 本书的说法: 并发属于代码，并行属于一个运行中的程序。
+    - 《Go语言区块链应用开发》书中的说法: 并行强调的是同一时刻上同时做事的能力，并发强调的是交替做不同事情的能力。并发是不同的代码块交替执行，并行是不同的代码块同时执行，并行一定要是多核CPU才行
 - sync 和 channel 的区别
     - sync 对性能要求高，保护某个结构的内部状态，不关心操作的结果
     - channel 需要转让数据的所有权，协调多个逻辑判断
@@ -714,7 +714,7 @@ fanIn := func(done <-chan interface{}, channels ...<-chan interface{}) <-chan in
 作用: 
 1. 提供一个可以取消调用图中分支的API
 2. 提供用于通过呼叫传输请求范围数据的数据包
-#### 4.10.1 Cancel
+#### 4.10.1 常用方法
 
 可能有三种情况
 1. goroutine 的父 goroutine 想取消它
@@ -855,20 +855,78 @@ func locale(ctx context.Context) (string, error) {
 
 ```go
 func locale(ctx context.Context) (string, error) {
-	if deadline, ok := ctx.Deadline(); ok {
-		if deadline.Sub(time.Now().Add(1*time.Minute)) <= 0 {
-			return "", context.DeadlineExceeded
-		}
-	}
-	select {
-	case <-ctx.Done():
-		// 这一行返回为什么Context被取消的原因。该错误会已知弹出到main，这会导致取消
-		return "", ctx.Err()
-	case <-time.After(1 * time.Minute):
-		// case <-time.After(1 * time.Second):
-	}
-	return "EN/US", nil
+    if deadline, ok := ctx.Deadline(); ok {
+        if deadline.Sub(time.Now().Add(1*time.Minute)) <= 0 {
+            return "", context.DeadlineExceeded
+        }
+    }
+    select {
+    case <-ctx.Done():
+        // 这一行返回为什么Context被取消的原因。该错误会已知弹出到main，这会导致取消
+        return "", ctx.Err()
+    case <-time.After(1 * time.Minute):
+        // case <-time.After(1 * time.Second):
+    }
+    return "EN/US", nil
 }
 ```
 
-`ctx.Deadline()` 是为了检查context是否提供了超时时间。如果超过截止时间，那么返回context包中的特定错误。
+`ctx.Deadline()` 是为了检查context是否提供了超时时间。如果超过截止时间，那么返回context包中的特定错误。**允许函数立即失败**，这是我在使用python的时候一直想要的一个功能。
+
+#### 4.10.2 Cancel
+
+`context` 的另一个功能: **用于存储和检索请求范围数据的Context的数据包**
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+)
+
+func ProcessRequest(userID, authToken string) {
+    ctx := context.WithValue(context.Background(), "userID", userID)
+    ctx = context.WithValue(ctx, "authToken", authToken)
+    HandleResponse(ctx)
+}
+
+func HandleResponse(ctx context.Context) {
+    fmt.Printf("handling response for %v (%v)", ctx.Value("userID"), ctx.Value("authToken"))
+}
+
+func main() {
+    ProcessRequest("hunt", "123")
+}
+```
+
+其中需要注意的是需要使用类型安全的函数来从context获取值
+
+```go
+type ctxKey int
+
+const (
+    ctxUserID ctxKey = iota
+    ctxAuthToken
+)
+
+func UserID(c context.Context) string {
+    return c.Value(ctxUserID).(string)
+}
+
+func AuthToken(c context.Context) string {
+    return c.Value(ctxAuthToken).(string)
+}
+
+func HandleResponse(ctx context.Context) {
+    // fmt.Printf("handling response for %v (%v)", ctx.Value("userID"), ctx.Value("authToken"))
+    fmt.Printf("handling response for %v (auth: %v)", UserID(ctx), AuthToken(ctx))
+}
+```
+
+## 5. Go语言的并发模式
+
+### 5.1 异常传递
+
+
+
